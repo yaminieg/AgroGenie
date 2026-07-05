@@ -23,7 +23,6 @@ ee_initialized = False
 USE_SIMULATION_MODE = False
 
 
-
 try:
     import ee
 
