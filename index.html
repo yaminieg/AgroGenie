@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgroGenie - Precision Farming Advisory Dashboard</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link class="styles" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+
+    <!-- FULL SCREEN GEE CONNECTION ERROR OVERLAY -->
+    <div id="gee-connection-error" class="hidden">
+        <div class="error-card">
+            <div class="error-illustration">
+                <i class="fa-solid fa-triangle-exclamation pulse-warning"></i>
+            </div>
+            <h1 id="txt-gee-error-title">Unable to Connect</h1>
+            <p id="txt-gee-error-desc">Unable to connect to Google Earth Engine. Please check your internet connection or try again later.</p>
+            <button class="btn btn-primary" onclick="checkConnectionAndRetry()">
+                <i class="fa-solid fa-arrows-rotate"></i> <span id="txt-retry-btn">Retry Connection</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ONBOARDING PROFILE MODAL -->
+    <div id="profile-modal" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-user-gear"></i> <span id="txt-profile-title">Farmer Profile Setup</span></h2>
+            </div>
+            <div class="modal-body">
+                <p id="txt-profile-instruction">Please complete your profile to enable AgroGenie precision farming advisories.</p>
+                <div class="form-group">
+                    <label for="farmer-name" id="lbl-farmer-name">Farmer Name</label>
+                    <input type="text" id="farmer-name" placeholder="Enter your name" required>
+                </div>
+                <div class="form-group">
+                    <label for="farmer-country" id="lbl-country">Country</label>
+                    <select id="farmer-country">
+                        <option value="">Select Country</option>
+                        <option value="India">India</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div id="country-warning" class="warning-text hidden">
+                    <i class="fa-solid fa-circle-info"></i> This website is designed only for India.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" onclick="saveProfile()" id="btn-save-profile">Save & Create Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI DYNAMIC LOADING OVERLAY -->
+    <div id="loading-overlay" class="modal-overlay hidden">
+        <div class="loading-card">
+            <div class="spinner-container">
+                <div class="circle-spinner"></div>
+                <i class="fa-solid fa-seedling loading-icon pulse-grow"></i>
+            </div>
+            <h3 id="loading-status-title">AI Engine Processing</h3>
+            <ul class="loading-steps">
+                <li id="step-1" class="step-pending"><i class="fa-solid fa-circle-notch fa-spin step-spin"></i> <span id="txt-step-1">Analyzing satellite imagery...</span></li>
+                <li id="step-2" class="step-pending"><i class="fa-solid fa-circle-notch fa-spin step-spin"></i> <span id="txt-step-2">Predicting crop classification...</span></li>
+                <li id="step-3" class="step-pending"><i class="fa-solid fa-circle-notch fa-spin step-spin"></i> <span id="txt-step-3">Calculating soil moisture stress...</span></li>
+                <li id="step-4" class="step-pending"><i class="fa-solid fa-circle-notch fa-spin step-spin"></i> <span id="txt-step-4">Generating irrigation recommendations...</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- MAIN FIXED LAYOUT STRUCTURE -->
+    <div class="dashboard-container">
+        
+        <!-- FIXED LEFT SIDEBAR -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <img src="logo.jpg" alt="AgroGenie Logo" class="logo-img">
+                <div class="logo-text">
+                    <h1>AgroGenie</h1>
+                    <span id="txt-logo-subtitle">PRECISION AGRICULTURE</span>
+                </div>
+            </div>
+            
+            <div class="sidebar-dropdown-group">
+                <label id="lbl-language"><i class="fa-solid fa-globe"></i> Language</label>
+                <select id="language-select" onchange="changeLanguage()">
+                    <option value="en">English (EN)</option>
+                    <option value="ta">Tamil (தமிழ்)</option>
+                    <option value="hi">Hindi (हिन्दी)</option>
+                </select>
+            </div>
+
+            <nav class="sidebar-nav">
+                <ul>
+                    <li><a href="#section-home" class="nav-link active" onclick="scrollToSection('section-home', event)"><i class="fa-solid fa-house"></i> <span id="menu-home">Home</span></a></li>
+                    <li><a href="#section-profile" class="nav-link" onclick="openProfileSettings(event)"><i class="fa-solid fa-user"></i> <span id="menu-profile">Profile Settings</span></a></li>
+                    
+                    <li class="nav-divider"></li>
+                    <li class="menu-header" id="hdr-data-entry">Data Entry</li>
+                    
+                    <li><a href="#section-location" class="nav-link" onclick="scrollToSection('section-location', event)"><i class="fa-solid fa-location-crosshairs"></i> <span id="menu-location">Location Source</span></a></li>
+                    <li><a href="#section-boundary" class="nav-link" onclick="scrollToSection('section-boundary', event)"><i class="fa-solid fa-draw-polygon"></i> <span id="menu-boundary">Field Boundary</span></a></li>
+                    
+                    <li class="nav-divider"></li>
+                    <li class="menu-header" id="hdr-visualizations">Visualizations</li>
+                    
+                    <li><a href="#section-maps" class="nav-link" onclick="scrollToSection('section-maps', event)"><i class="fa-solid fa-map-location-dot"></i> <span id="menu-maps">Maps Workspace</span></a></li>
+                    <li><a href="#section-crop" class="nav-link" onclick="scrollToSection('section-crop', event)"><i class="fa-solid fa-wheat-awn"></i> <span id="menu-crop">Crop & Stage</span></a></li>
+                    <li><a href="#section-moisture" class="nav-link" onclick="scrollToSection('section-moisture', event)"><i class="fa-solid fa-droplet"></i> <span id="menu-moisture">Moisture Monitor</span></a></li>
+                    <li><a href="#section-advisory" class="nav-link" onclick="scrollToSection('section-advisory', event)"><i class="fa-solid fa-clipboard-list"></i> <span id="menu-advisory">Irrigation Advisory</span></a></li>
+                    <li><a href="#section-analytics" class="nav-link" onclick="scrollToSection('section-analytics', event)"><i class="fa-solid fa-chart-line"></i> <span id="menu-analytics">Analytics</span></a></li>
+                    <li><a href="#section-deficit" class="nav-link" onclick="scrollToSection('section-deficit', event)"><i class="fa-solid fa-cloud-sun-rain"></i> <span id="menu-deficit">Deficit Forecast</span></a></li>
+                    <li><a href="#section-planner" class="nav-link" onclick="scrollToSection('section-planner', event)"><i class="fa-solid fa-network-wired"></i> <span id="menu-planner">Smart Planner</span></a></li>
+                    <li><a href="#section-reports" class="nav-link" onclick="scrollToSection('section-reports', event)"><i class="fa-solid fa-file-pdf"></i> <span id="menu-reports">Reports</span></a></li>
+                    <li><a href="#section-alerts" class="nav-link" onclick="scrollToSection('section-alerts', event)"><i class="fa-solid fa-bell"></i> <span id="menu-alerts">Alerts</span></a></li>
+                    
+                    <li class="nav-divider"></li>
+                    <li><a href="#" class="nav-link" onclick="logoutFarmer()"><i class="fa-solid fa-right-from-bracket"></i> <span id="menu-logout">Logout</span></a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- FIXED TOP BAR -->
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <h2 id="txt-dashboard-title">Precision Farming Advisory Dashboard</h2>
+                <span class="subtitle" id="txt-dashboard-subtitle">Real-time Satellite Indices, ML Predictions & Earth Engine Hydrological Analysis</span>
+            </div>
+            <div class="top-bar-right">
+                <div class="date-badge">
+                    <i class="fa-regular fa-calendar"></i>
+                    <span id="current-date-txt">June 28, 2026</span>
+                </div>
+                <div id="gee-status-badge" class="gee-badge active">
+                    <span class="pulse-dot"></span>
+                    <span id="txt-gee-status">GEE Active</span>
+                </div>
+                <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Theme">
+                    <i class="fa-solid fa-sun icon-light"></i>
+                    <i class="fa-solid fa-moon icon-dark"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- SCROLLABLE CENTER WORKSPACE -->
+        <main class="main-workspace">
+            
+            <!-- SELECTED LOCATION DETAILS BANNER -->
+            <div id="location-banner" class="location-banner">
+                <div class="banner-icon"><i class="fa-solid fa-circle-info"></i></div>
+                <div class="banner-text" id="location-details-text">No coordinates specified, select a location from the sidebar to begin.</div>
+            </div>
+
+            <!-- SECTION 1: HOME WELCOME SCREEN -->
+            <section id="section-home" class="workspace-section">
+                <div class="section-card welcome-card">
+                    <div class="welcome-header">
+                        <i class="fa-solid fa-circle-nodes welcome-icon"></i>
+                        <div>
+                            <h2 id="txt-welcome-title">Welcome to AgroGenie!</h2>
+                            <p id="txt-welcome-subtitle">Advanced spatial advisory system powered by ML model inference and satellite remote sensing.</p>
+                        </div>
+                    </div>
+                    <div class="welcome-grid">
+                        <div class="feature-item">
+                            <i class="fa-solid fa-satellite-dish"></i>
+                            <h4 id="txt-feat-1-title">Real-Time Satellite Sensing</h4>
+                            <p id="txt-feat-1-desc">Direct query pipelines to Copernicus Sentinel satellites for instant crop indices.</p>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fa-solid fa-brain"></i>
+                            <h4 id="txt-feat-2-title">Predictive AI Inference</h4>
+                            <p id="txt-feat-2-desc">Deep classification algorithms predict crop types and growth stages with high confidence.</p>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fa-solid fa-seedling"></i>
+                            <h4 id="txt-feat-3-title">Irrigation Advisory</h4>
+                            <p id="txt-feat-3-desc">Water requirement modeling calculates target volume recommendations based on crop evapotranspiration.</p>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fa-solid fa-chart-column"></i>
+                            <h4 id="txt-feat-4-title">Digital Twin Simulation</h4>
+                            <p id="txt-feat-4-desc">Simulate different irrigation schedules to optimize water conservation and prevent crop stress.</p>
+                        </div>
+                    </div>
+                    <div class="instructions-box">
+                        <h4 id="txt-instr-title"><i class="fa-solid fa-list-check"></i> Quick Setup Steps</h4>
+                        <ol>
+                            <li id="txt-instr-1">Complete your registration in **Profile Settings**.</li>
+                            <li id="txt-instr-2">Go to **Location Source** and select your coordinates.</li>
+                            <li id="txt-instr-3">Use **Field Boundary** to draw your farm boundary on the satellite workspace.</li>
+                            <li id="txt-instr-4">Click **Finish** to compute and unlock all precision analytics dashboards.</li>
+                        </ol>
+                    </div>
+
+                    <!-- AI HELP / CHAT WIDGET -->
+                    <div class="ai-help-widget">
+                        <h4 id="txt-ai-help-title"><i class="fa-solid fa-robot"></i> AgroGenie AI Assistant</h4>
+                        <div class="chat-container">
+                            <div class="chat-messages" id="chat-messages">
+                                <div class="message message-bot">
+                                    Hello! I am your AgroGenie Assistant. Ask me anything about irrigation advisories, NDVI, or how to set up your maps.
+                                </div>
+                            </div>
+                            <div class="chat-input-area">
+                                <input type="text" id="chat-input" placeholder="Ask AgroGenie...">
+                                <button onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 2: LOCATION SOURCE -->
+            <section id="section-location" class="workspace-section">
+                <div class="section-card">
+                    <h3 class="card-title" id="txt-location-src-title"><i class="fa-solid fa-location-crosshairs"></i> Location Source</h3>
+                    <p class="card-desc" id="txt-location-src-desc">Specify your farm coordinates using one of the three options below.</p>
+                    
+                    <div class="location-options-grid">
+                        <div class="location-card-option" onclick="triggerGeoLocation()">
+                            <i class="fa-solid fa-location-arrow"></i>
+                            <h4 id="txt-loc-gps">GPS Current Location</h4>
+                            <p id="txt-loc-gps-desc">Query browser API coordinates</p>
+                        </div>
+                        <div class="location-card-option">
+                            <i class="fa-solid fa-image"></i>
+                            <h4 id="txt-loc-img">Upload EXIF GPS Image</h4>
+                            <p id="txt-loc-img-desc">Read metadata from camera photo</p>
+                            <input type="file" id="imageInput" accept="image/*" onchange="readImage(this)" class="file-input">
+                        </div>
+                        <div class="location-card-option">
+                            <i class="fa-solid fa-keyboard"></i>
+                            <h4 id="txt-loc-manual">Manual Entry Form</h4>
+                            <p id="txt-loc-manual-desc">Key in coordinates directly</p>
+                            <div class="manual-form">
+                                <input type="number" id="manualLat" placeholder="Latitude" step="any">
+                                <input type="number" id="manualLon" placeholder="Longitude" step="any">
+                                <button class="btn btn-primary" onclick="setManualLocation()" id="btn-manual-loc">Set</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="result" class="location-result-box hidden"></div>
+                </div>
+            </section>
+
+            <!-- SECTION 3: FIELD BOUNDARY -->
+            <section id="section-boundary" class="workspace-section">
+                <div class="section-card">
+                    <h3 class="card-title" id="txt-field-boundary-title"><i class="fa-solid fa-draw-polygon"></i> Field Boundary</h3>
+                    <p class="card-desc" id="txt-field-boundary-desc">Draw a closed polygon around your farm plot in the satellite map below. This enables satellite raster data extraction.</p>
+                    
+                    <div class="boundary-controls-grid">
+                        <div class="area-value-display">
+                            <span id="txt-farm-area-label">Farm Area:</span>
+                            <div class="area-input-wrapper">
+                                <button onclick="decreaseArea()"><i class="fa-solid fa-minus"></i></button>
+                                <input type="number" id="farmArea" step="0.01" value="0.00">
+                                <span class="unit-text">Acres</span>
+                                <button onclick="increaseArea()"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+                        </div>
+                        <div class="boundary-actions">
+                            <button class="btn btn-warning" onclick="redrawField()"><i class="fa-solid fa-rotate-left"></i> <span id="txt-btn-redraw">Redraw</span></button>
+                            <button class="btn btn-danger" onclick="deleteField()"><i class="fa-solid fa-trash-can"></i> <span id="txt-btn-delete">Delete</span></button>
+                            <button class="btn btn-success" onclick="continueProcess()"><i class="fa-solid fa-check"></i> <span id="txt-btn-finish">Finish Drawing & Analyze</span></button>
+                        </div>
+                    </div>
+                    <p id="areaText" class="area-helper-text">Draw your field boundary first using polygon tool on the map.</p>
+                </div>
+            </section>
+
+            <!-- SECTION 4: MAPS WORKSPACE -->
+            <section id="section-maps" class="workspace-section">
+                <div class="maps-grid-container">
+                    <div class="map-card-wrapper">
+                        <h4 id="txt-title-map1"><i class="fa-solid fa-satellite"></i> Satellite Mapping Workspace</h4>
+                        <div id="map" class="leaflet-map-element"></div>
+                    </div>
+                    <div class="map-card-wrapper">
+                        <div class="map-header-flex">
+                            <h4 id="txt-title-map2"><i class="fa-solid fa-droplet"></i> Moisture Stress Analysis Map</h4>
+                            <div class="stress-legend">
+                                <span class="legend-item"><span class="legend-color color-green"></span>🟢 <span id="txt-leg-no">No Stress</span></span>
+                                <span class="legend-item"><span class="legend-color color-yellow"></span>🟡 <span id="txt-leg-mild">Mild</span></span>
+                                <span class="legend-item"><span class="legend-color color-orange"></span>🟠 <span id="txt-leg-mod">Moderate</span></span>
+                                <span class="legend-item"><span class="legend-color color-red"></span>🔴 <span id="txt-leg-sev">Severe</span></span>
+                            </div>
+                        </div>
+                        <div id="stressContainer" class="stress-map-container-overlay">
+                            <div id="showStressOverlayText" class="overlay-text">
+                                <i class="fa-solid fa-map-location pulse-grow"></i>
+                                <p id="txt-map2-prompt">Draw a field boundary and click "Finish" to generate the real-time Moisture Stress Map.</p>
+                            </div>
+                            <div id="stressMap" class="leaflet-map-element hidden"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DASHBOARD DATA CARDS (CROP, MOISTURE, ADVISORY, DEFICIT, WEATHER) -->
+            <div class="dashboard-cards-grid">
+                
+                <!-- CROP & GROWTH STAGE CARD -->
+                <article id="section-crop" class="metric-card">
+                    <div class="card-header">
+                        <h3 id="txt-crop-stage-card-title">Crop & Growth Stage</h3>
+                        <i class="fa-solid fa-wheat-awn icon-accent"></i>
+                    </div>
+                    <div class="metric-value-large" id="lbl-crop-val">- -</div>
+                    <div class="metric-confidence" id="lbl-crop-conf">Confidence: --%</div>
+                    <div class="metric-sub-label" id="lbl-stage-label">Growth Stage</div>
+                    <div class="metric-value-medium" id="lbl-stage-val">- -</div>
+                    <div class="metric-confidence" id="lbl-stage-conf">Confidence: --%</div>
+                </article>
+
+                <!-- MOISTURE MONITOR CARD -->
+                <article id="section-moisture" class="metric-card">
+                    <div class="card-header">
+                        <h3 id="txt-moisture-mon-card-title">Moisture Monitor</h3>
+                        <i class="fa-solid fa-temperature-empty icon-accent"></i>
+                    </div>
+                    <div class="progress-rings-container">
+                        <div class="ring-item">
+                            <div class="ring-svg-wrapper">
+                                <svg class="progress-ring" width="80" height="80">
+                                    <circle class="ring-bg" cx="40" cy="40" r="34"></circle>
+                                    <circle class="ring-fill" id="ring-soil-moisture" cx="40" cy="40" r="34"></circle>
+                                </svg>
+                                <span class="ring-text" id="txt-ring-soil-val">26%</span>
+                            </div>
+                            <span class="ring-label" id="lbl-ring-sm">Soil Moisture</span>
+                        </div>
+                        <div class="ring-item">
+                            <div class="ring-svg-wrapper">
+                                <svg class="progress-ring" width="80" height="80">
+                                    <circle class="ring-bg" cx="40" cy="40" r="34"></circle>
+                                    <circle class="ring-fill" id="ring-water-req" cx="40" cy="40" r="34"></circle>
+                                </svg>
+                                <span class="ring-text" id="txt-ring-water-val">0%</span>
+                            </div>
+                            <span class="ring-label" id="lbl-ring-wr">Water Req.</span>
+                        </div>
+                    </div>
+                    <div class="metric-summary-inline">
+                        <span id="lbl-net-irrigation">Net Irrigation Needed:</span>
+                        <strong id="lbl-net-irrigation-val">0%</strong>
+                    </div>
+                </article>
+
+                <!-- IRRIGATION ADVISORY CARD -->
+                <article id="section-advisory" class="metric-card grid-span-2">
+                    <div class="card-header">
+                        <h3 id="txt-irr-adv-card-title">Irrigation Advisory</h3>
+                        <i class="fa-solid fa-spray-can-sparkles icon-accent"></i>
+                    </div>
+                    <div class="metric-flex-row">
+                        <div class="advisory-main">
+                            <div class="metric-value-huge" id="lbl-water-volume">7900 L</div>
+                            <span class="metric-sub-label" id="lbl-total-req-vol">Total Recommended Volume</span>
+                        </div>
+                        <div class="advisory-status-badge badge-warning" id="lbl-adv-status">
+                            <i class="fa-solid fa-circle-exclamation"></i> <span id="lbl-adv-status-txt">Irrigate Today</span>
+                        </div>
+                    </div>
+                    <div class="ai-summary-box">
+                        <span class="ai-summary-label"><i class="fa-solid fa-robot"></i> <span id="lbl-ai-rec-title">AI Recommendation</span></span>
+                        <p id="lbl-ai-decision-summary" class="ai-summary-text">Based on satellite imagery, soil moisture, rainfall forecast, crop stage, and predicted stress, the system recommends setting your location and boundary to run the model.</p>
+                    </div>
+                </article>
+
+                <!-- WATER DEFICIT CARD -->
+                <article class="metric-card">
+                    <div class="card-header">
+                        <h3 id="txt-water-deficit-title">Water Deficit</h3>
+                        <i class="fa-solid fa-bucket icon-accent"></i>
+                    </div>
+                    <div class="metric-value-huge" id="lbl-water-deficit-val">4 mm</div>
+                    <p class="metric-sub-text" id="txt-water-deficit-desc">Cumulative crop water demand deficit over past month.</p>
+                </article>
+
+                <!-- LOCAL WEATHER CARD -->
+                <article class="metric-card weather-card">
+                    <div class="card-header">
+                        <h3 id="txt-weather-title">Local Weather</h3>
+                        <i class="fa-solid fa-cloud-sun icon-accent"></i>
+                    </div>
+                    <div class="weather-main-row">
+                        <i class="fa-solid fa-cloud-sun weather-main-icon" id="weather-icon-indicator"></i>
+                        <div>
+                            <div class="weather-temp" id="lbl-weather-temp">--</div>
+                            <div class="weather-cond" id="lbl-weather-cond">--</div>
+                        </div>
+                    </div>
+                    <div class="weather-forecast-grid" id="weather-forecast-container">
+                        <!-- Simulated 3-day forecast -->
+                        <div class="forecast-day">
+                            <span>Thu</span>
+                            <i class="fa-solid fa-cloud"></i>
+                            <span>38°</span>
+                        </div>
+                        <div class="forecast-day">
+                            <span>Fri</span>
+                            <i class="fa-solid fa-cloud"></i>
+                            <span>37°</span>
+                        </div>
+                        <div class="forecast-day">
+                            <span>Sat</span>
+                            <i class="fa-solid fa-cloud"></i>
+                            <span>36°</span>
+                        </div>
+                    </div>
+                </article>
+
+            </div>
+
+            <!-- SECTION 5: ANALYTICS -->
+            <section id="section-analytics" class="workspace-section">
+                <div class="section-card">
+                    <h3 class="card-title" id="txt-analytics-title"><i class="fa-solid fa-chart-line"></i> Analytics</h3>
+                    <p class="card-desc" id="txt-analytics-desc">Time-series tracking of existing Satellite Spectral Indices (NDVI, Soil Moisture, Stress Score) over selected farm grids.</p>
+                    
+                    <div class="chart-container-wrapper">
+                        <canvas id="spectralIndicesChart" height="280"></canvas>
+                    </div>
+
+                    <div class="quick-status-cards">
+                        <div class="status-pill">
+                            <span class="status-icon"><i class="fa-solid fa-leaf text-success"></i></span>
+                            <div>
+                                <span class="status-label">NDVI</span>
+                                <strong id="lbl-quick-ndvi">--</strong>
+                            </div>
+                        </div>
+                        <div class="status-pill">
+                            <span class="status-icon"><i class="fa-solid fa-droplet text-info"></i></span>
+                            <div>
+                                <span class="status-label">Soil Moisture</span>
+                                <strong id="lbl-quick-sm">--</strong>
+                            </div>
+                        </div>
+                        <div class="status-pill">
+                            <span class="status-icon"><i class="fa-solid fa-triangle-exclamation text-warning"></i></span>
+                            <div>
+                                <span class="status-label">Stress Risk</span>
+                                <strong id="lbl-quick-stress">--</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 6: DEFICIT FORECAST -->
+            <section id="section-deficit" class="workspace-section">
+                <div class="section-card">
+                    <h3 class="card-title" id="txt-deficit-title"><i class="fa-solid fa-cloud-sun-rain"></i> 8-Day Water Deficit Forecast</h3>
+                    <p class="card-desc" id="txt-deficit-desc">Predicted crop evapotranspiration (ET) and cumulative deficit balance over the next 8 days.</p>
+                    
+                    <div class="chart-container-wrapper">
+                        <canvas id="deficitForecastChart" height="280"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 7: SMART PLANNER (DIGITAL TWIN) -->
+            <section id="section-planner" class="workspace-section">
+                <div class="section-card">
+                    <h3 class="card-title" id="txt-planner-title"><i class="fa-solid fa-network-wired"></i> Smart Planner (Digital Twin Simulator)</h3>
+                    <p class="card-desc" id="txt-planner-desc">Compare dynamic simulation scenarios to evaluate predicted stress index and efficiency scores.</p>
+                    
+                    <div class="table-responsive">
+                        <table class="planner-table">
+                            <thead>
+                                <tr>
+                                    <th id="th-scenario">Scenario</th>
+                                    <th id="th-predicted-stress">Predicted Stress</th>
+                                    <th id="th-risk">Risk Level</th>
+                                    <th id="th-score">Performance Score</th>
+                                    <th id="th-action">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="planner-table-body">
+                                <tr>
+                                    <td colspan="5" style="text-align:center; padding:20px;">
+                                        Run analysis to view Digital Twin simulation.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 8: REPORTS -->
+            <section id="section-reports" class="workspace-section">
+                <div class="section-card">
+                    <h3 class="card-title" id="txt-reports-title"><i class="fa-solid fa-file-invoice"></i> Reports</h3>
+                    <p class="card-desc" id="txt-reports-desc">Generate and download comprehensive agronomic report datasets in CSV or PDF format.</p>
+                    
+                    <div class="reports-flex-row">
+                        <div class="report-feature-info">
+                            <h4 id="txt-rep-includes-title"><i class="fa-solid fa-clipboard-list"></i> Export Includes:</h4>
+                            <ul>
+                                <li id="txt-rep-1">Farmer Details & Registration info</li>
+                                <li id="txt-rep-2">Farm Area & Bounding Coordinates</li>
+                                <li id="txt-rep-3">Crop Classification & Stage confidence</li>
+                                <li id="txt-rep-4">Satellite indices (NDVI, soil moisture, stress)</li>
+                                <li id="txt-rep-5">Irrigation volume recommendations</li>
+                                <li id="txt-rep-6">8-day Deficit Forecast & Digital Twin Simulator score comparisons</li>
+                            </ul>
+                        </div>
+                        <div class="report-buttons">
+                            <button class="btn btn-secondary btn-large" onclick="downloadCSVReport()">
+                                <i class="fa-solid fa-file-csv"></i> <span id="btn-csv-txt">Download CSV Data</span>
+                            </button>
+                            <button class="btn btn-primary btn-large" onclick="downloadPDFReport()">
+                                <i class="fa-solid fa-file-pdf"></i> <span id="btn-pdf-txt">Download PDF / Print Report</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 9: ALERTS -->
+            <section id="section-alerts" class="workspace-section">
+                <div class="section-card">
+                    <h3 class="card-title" id="txt-alerts-title"><i class="fa-solid fa-bell"></i> Alerts</h3>
+                    <p class="card-desc" id="txt-alerts-desc">Dynamic warnings and notification systems processed by AgroGenie AI models.</p>
+                    
+                    <div class="alerts-stack" id="alerts-container">
+                        <div class="alert-item alert-danger">
+                            <i class="fa-solid fa-circle-exclamation alert-icon"></i>
+                            <div class="alert-content">
+                                <h4 id="lbl-alert-1-title">Severe Moisture Stress Alert</h4>
+                                <p id="lbl-alert-1-desc">Severe moisture stress detected in southeastern quadrant. Immediate water application suggested.</p>
+                            </div>
+                        </div>
+                        <div class="alert-item alert-warning">
+                            <i class="fa-solid fa-cloud-showers-water alert-icon"></i>
+                            <div class="alert-content">
+                                <h4 id="lbl-alert">Rain expected tomorrow</h4>
+                                <p id="lbl-alert-2-desc">Light showers (estimated 4.2mm) forecast in 24 hours. You may delay manual irrigation.</p>
+                            </div>
+                        </div>
+                        <div class="alert-item alert-info">
+                            <i class="fa-solid fa-temperature-arrow-up alert-icon"></i>
+                            <div class="alert-content">
+                                <h4 id="lbl-alert-3-title">High Temperature Warning</h4>
+                                <p id="lbl-alert-3-desc">Ambient temperature predicted to reach 37°C. Transpiration levels will rise.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- FOOTER -->
+            <footer class="dashboard-footer">
+                <div class="footer-left">
+                    <strong>AgroGenie Precision Farming Advisory Dashboard</strong>
+                    <br>
+                    <span>ISRO Hackathon Project Entry</span>
+                </div>
+                <div class="footer-center">
+                    <span id="txt-footer-time">Last Updated: 28 Jun 2026 10:45 AM</span>
+                </div>
+                <div class="footer-right">
+                    <span>© 2026 AgroGenie. All rights reserved.</span>
+                </div>
+            </footer>
+
+        </main>
+    </div>
+
+    <!-- Leaflet & Drawing Library Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <!-- Custom JS script -->
+    <script src="script.js"></script>
+
+</body>
+</html>
