@@ -8,7 +8,7 @@ import random
 import traceback
 import urllib.request
 import json
-
+import os
 
 app = Flask(__name__)
 
@@ -22,15 +22,27 @@ CORS(app)
 ee_initialized = False
 USE_SIMULATION_MODE = False
 
+
+
 try:
     import ee
-    ee.Initialize(project="smartirrigation-499613")
-    print("Earthengine initialized successfully")
+
+    service_account = "earth-engine-service@smartirrigation-499613.iam.gserviceaccount.com"
+
+    credentials = ee.ServiceAccountCredentials(
+        service_account,
+        key_data=os.environ["EE_PRIVATE_KEY_JSON"]
+    )
+
+    ee.Initialize(credentials)
+
+    print("Earth Engine initialized successfully")
     ee_initialized = True
+
 except Exception as e:
-    print(f"Earthengine initialization failed: {e}")
-    print("Falling back to Offline Simulation Mode")
+    print(f"Earth Engine initialization failed: {e}")
     USE_SIMULATION_MODE = True
+
 
 # Load models and encoders with try-except to prevent startup failure if any pkl is missing/corrupted
 try:
